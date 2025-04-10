@@ -91,8 +91,8 @@ class h5toPDB:
         else:
             resid_candidates = []
             molcompose = []
-            molsize_update = self.molsize
-            molcolor_update = self.molcolor
+            molsize = self.molsize
+            molcolor = self.molcolor
         return resid_candidates, molcompose, molsize, molcolor
     
     def generate_pdb(self):
@@ -102,7 +102,8 @@ class h5toPDB:
         resid_candidates, molcompose, _, _ = self.resid_from_setting()
         fname = self.filename[:-3] + ".pdb"
         f = open(fname, "w")
-        f.write("CRYST1"+"  "+f"{format(self.xbox*10, '.3f'):<8}"+" "+f"{format(self.ybox*10, '.3f'):<8}"+" "+f"{format(self.zbox*10, '.3f'):<8}"+" 90.00  90.00  90.00"+"\n")
+        f.write("CRYST1"+"  "+f"{format(self.xbox*10, '.2f'):<8}"+" "+f"{format(self.ybox*10, '.2f'):<8}"+" "+f"{format(self.zbox*10, '.2f'):<8}"+" 90.00  90.00  90.00"+"\n")
+        resid = "PSD" # by default
         ### Generate PDB file
         for t in tqdm(range(start, start+duration)):
             f.write("MODEL\n")
@@ -124,8 +125,6 @@ class h5toPDB:
                         if self.moltype[self.molnum.index(self.rec[m][0])] in molcompose[resid_candidates[r]]:
                             resid = resid_candidates[r][:3]
                             break
-                else:
-                    resid = "PSD"
                 f.write("ATOM   "+space+str(self.rec[m][1])+" "+f"{self.moltype[self.molnum.index(self.rec[m][0])][:4]:<4}"+" "+resid+" A"+space+str(self.rec[m][1])+position+"  0.00  0.00\n")
             f.write("ENDMDL\n")
         f.write("END") 
@@ -134,17 +133,17 @@ class h5toPDB:
 
     ### necessary for drawing edge
     def generate_tcl(self):
-        resid_candidates, molcompose, self.molsize, self.molcolor = self.resid_from_setting() 
+        resid_candidates, molcompose, _, _ = self.resid_from_setting()
+        self.moltype, self.molnum, self.molsize, self.molcolor = self.update_existingtypes() 
         edge_list = []
         edge_data = self.connected_edge(0)
         for e in range(0, len(edge_data)):
             edge_list.append(tuple(edge_data[e,:].astype(int))) 
         ### Generate Tcl script file
-        fname = self.filename[:-3] + ".pdb"
         fname_tcl = self.filename[:-3] + ".pdb.tcl"
         with open(fname_tcl, 'w') as g:
             g.write("mol delete top\n")
-            g.write("mol load pdb "+fname+"\n")
+            g.write("mol load pdb "+fname_tcl[:-4]+"\n")
             g.write("mol delrep 0 top\n")
             g.write("display resetview\n")
             overlap = np.zeros(len(self.moltype))
