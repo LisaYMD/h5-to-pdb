@@ -34,6 +34,7 @@ class h5toPDB:
         self.kbt = info["kbt"]
         self.xbox, self.ybox, self.zbox = info["box_size"][0], info["box_size"][1], info["box_size"][2]
         # molecule size and color
+        # molsize is calculated by Stokes-Einstein equation: D = kBT/(6πηr)
         eta = 0.85137 # assume the viscosity of water (milliPascal*second) # "cell"
         self.molsize = [self.kbt*10/(6.02214076*6*np.pi*eta*self.mol_diffusion[k]) for k in range(0, len(self.mol_diffusion))]
         self.molcolor = [0 for k in range(0, len(self.moltype))] # default color = 0 (blue) 
@@ -69,12 +70,18 @@ class h5toPDB:
     def update_existingtypes(self):
         accum_types = set()
         for t in range(0, self.traj_len):
-            current_types = set([self.rec[m][0] for m in range(self.limrec[t,0], self.limrec[t,1])])
-            accum_types = accum_types | current_types
+            start, end = self.limrec[t,0], self.limrec[t,1]
+            accum_types.update(rec[0] for rec in self.rec[start:end])
         molnum2 = list(accum_types)
-        moltype2 = [self.moltype[self.molnum.index(k)] for k in molnum2]
-        molsize2 = [self.molsize[self.molnum.index(k)] for k in molnum2]
-        molcolor2 = [self.molcolor[self.molnum.index(k)] for k in molnum2]
+        mol_lookup = {num: (t, s, c) for num, t, s, c in zip(self.molnum, self.moltype, self.molsize, self.molcolor)}
+        moltype2 = []
+        molsize2 = []
+        molcolor2 = []
+        for num in molnum2:
+            t, s, c = mol_lookup[num]
+            moltype2.append(t)
+            molsize2.append(s)
+            molcolor2.append(c)
         return moltype2, molnum2, molsize2, molcolor2
 
     ## if you want to paint different molecule as different colors, you can consult setting files
@@ -99,40 +106,44 @@ class h5toPDB:
             molcolor = self.molcolor
         return resid_candidates, molcompose, molsize, molcolor
     
-    def generate_pdb(self):
-        print("Generating PDB file...")
+    def generate_pdb(self): 
+        print("Reading HDF5 file...")
         start, duration = 0, self.traj_len
-        edge_data = self.connected_edge(0)
         self.moltype, self.molnum, self.molsize, self.molcolor = self.update_existingtypes()
         resid_candidates, molcompose, _, _ = self.resid_from_setting()
         fname = self.filename[:-3] + ".pdb"
+        print("finish reading h5 file, start writing PDB file...")
+        
         # record the writing strings in list "lines"
-        resid = "PSD" # by default
+        # molecule lookup table (molnum -> moltype)
+        mol_lookup = {num: t for num, t in zip(self.molnum, self.moltype)}
+        # residue loopup table (moltype -> resid)
+        resid_lookup = {}
+        if resid_candidates:
+            for resid in resid_candidates:
+                for mol in molcompose[resid]:
+                    resid_lookup[mol] = resid[:3]  # take the first three letters of the residue name
+
         ### Generate PDB file
-        with open(fname, "w") as f:
+        with open(fname, "w", buffering=1024*1024) as f:
             f.write("CRYST1  "+f"{format(self.xbox*10, '.2f'):<8}"+" "+f"{format(self.ybox*10, '.2f'):<8}"+" "+f"{format(self.zbox*10, '.2f'):<8}"+" 90.00  90.00  90.00\n") 
             for t in tqdm(range(start, start+duration)):
-                lines = []
-                lines.append("MODEL\n")
+                lines = ["MODEL\n"]
                 for m in range(self.limrec[t,0], self.limrec[t,1]):
-                    pos0 = str(format(10*self.rec[m][3][0], '.1f')) 
-                    pos1 = str(format(10*self.rec[m][3][1], '.1f')) 
-                    pos2 = str(format(10*self.rec[m][3][2], '.1f')) 
-                    position = " "*(7-len(pos0)+4)+ pos0 + " "*(7-len(pos1)+1) + pos1 + " "*(7-len(pos2)+1) + pos2
-                    if self.rec[m][1] < 10:
-                        space = "   "
-                    elif self.rec[m][1] < 100:
-                        space = "  "
-                    elif self.rec[m][1] < 1000:
-                        space = " "
-                    else:
-                        space = ""
-                    if resid_candidates != []:
-                        for r in range(0, len(resid_candidates)):
-                            if self.moltype[self.molnum.index(self.rec[m][0])] in molcompose[resid_candidates[r]]:
-                                resid = resid_candidates[r][:3]
-                                break
-                    lines.append("ATOM   "+space+str(self.rec[m][1])+" "+f"{self.moltype[self.molnum.index(self.rec[m][0])][:4]:<4}"+" "+resid+" A"+space+str(self.rec[m][1])+position+"  0.00  0.00\n")
+                    rec = self.rec[m]
+                    mol_id, atom_id, _, coords = rec
+                    
+                    if  atom_id >= 100000:
+                        raise ValueError("Atom ID exceeds 99999, please check the input file.")
+                    atom_str = f"{atom_id:5d}"
+
+                    x, y, z = (c*10 for c in coords)
+                    position = f"{x:8.1f}{y:8.1f}{z:8.1f}"
+
+                    mol_t = mol_lookup[mol_id]
+                    resid = resid_lookup.get(mol_t, "PSD")
+
+                    lines.append(f"ATOM  {atom_str} {mol_t[:4]:<4} {resid} A{atom_str}{position}  0.00  0.00\n")
                 lines.append("ENDMDL\n")
                 f.write("".join(lines))
             f.write("END")
