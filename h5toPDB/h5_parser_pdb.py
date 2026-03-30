@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 import json
 import h5py
+import re
 
 class h5toPDB:
     def __init__(self, filename):
@@ -39,6 +40,9 @@ class h5toPDB:
         self.molsize = [self.kbt*10/(6.02214076*6*np.pi*eta*self.mol_diffusion[k]) for k in range(0, len(self.mol_diffusion))]
         self.molcolor = [0 for k in range(0, len(self.moltype))] # default color = 0 (blue) 
         return None
+    
+    def sanitize_name(name):
+        return re.sub(r'[^A-Za-z0-9_]', '_', name)
 
     def connected_edge(self, tim):
         timedges = self.edges[self.limedges[tim,0]:self.limedges[tim,1]]
@@ -140,10 +144,12 @@ class h5toPDB:
                     x, y, z = (c*10 for c in coords)
                     position = f"{x:8.1f}{y:8.1f}{z:8.1f}"
 
-                    mol_t = mol_lookup[mol_id]
-                    resid = resid_lookup.get(mol_t, "PSD")
+                    mol_t_raw = mol_lookup[mol_id]
+                    mol_t = sanitize_name(mol_t_raw)
+                    resid_raw = resid_lookup.get(mol_t, "PSD")
+                    resid = sanitize_name(resid_raw)
 
-                    lines.append(f"ATOM  {atom_str} {mol_t[:4]:<4} {resid} A{atom_str}{position}  0.00  0.00\n")
+                    lines.append(f"ATOM  {atom_str} {mol_t[:4]:<4} {resid[:3]} A{atom_str}{position}  0.00  0.00\n")
                 lines.append("ENDMDL\n")
                 f.write("".join(lines))
             f.write("END")
@@ -170,7 +176,9 @@ class h5toPDB:
             overlap = np.zeros(len(self.moltype))
             for l in range(0, len(self.moltype)):
                 lines_tcl.append("mol representation VDW "+str(self.molsize[l]*6.6)+"\n")
-                lines_tcl.append("mol selection name "+self.moltype[l]+"\n")
+                safe_name = sanitize_name(self.moltype[l])
+                lines_tcl.append("mol selection name "+safe_name+"\n")
+
                 if resid_candidates != []:
                     for r in range(0, len(resid_candidates)):
                         if self.moltype[l] in molcompose[resid_candidates[r]]:
