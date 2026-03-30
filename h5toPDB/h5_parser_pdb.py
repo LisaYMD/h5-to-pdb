@@ -41,7 +41,7 @@ class h5toPDB:
         self.molcolor = [0 for k in range(0, len(self.moltype))] # default color = 0 (blue) 
         return None
     
-    def sanitize_name(name):
+    def sanitize_name(self, name):
         return re.sub(r'[^A-Za-z0-9_]', '_', name)
 
     def connected_edge(self, tim):
@@ -145,9 +145,9 @@ class h5toPDB:
                     position = f"{x:8.1f}{y:8.1f}{z:8.1f}"
 
                     mol_t_raw = mol_lookup[mol_id]
-                    mol_t = sanitize_name(mol_t_raw)
+                    mol_t = self.sanitize_name(mol_t_raw)
                     resid_raw = resid_lookup.get(mol_t, "PSD")
-                    resid = sanitize_name(resid_raw)
+                    resid = self.sanitize_name(resid_raw)
 
                     lines.append(f"ATOM  {atom_str} {mol_t[:4]:<4} {resid[:3]} A{atom_str}{position}  0.00  0.00\n")
                 lines.append("ENDMDL\n")
@@ -176,7 +176,7 @@ class h5toPDB:
             overlap = np.zeros(len(self.moltype))
             for l in range(0, len(self.moltype)):
                 lines_tcl.append("mol representation VDW "+str(self.molsize[l]*6.6)+"\n")
-                safe_name = sanitize_name(self.moltype[l])
+                safe_name = self.sanitize_name(self.moltype[l])
                 lines_tcl.append("mol selection name "+safe_name+"\n")
 
                 if resid_candidates != []:
