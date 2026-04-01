@@ -37,7 +37,8 @@ class h5toPDB:
         # molecule size and color
         # molsize is calculated by Stokes-Einstein equation: D = kBT/(6πηr)
         eta = 0.85137 # assume the viscosity of water (milliPascal*second) # "cell"
-        self.molsize = [self.kbt*10/(6.02214076*6*np.pi*eta*self.mol_diffusion[k]) for k in range(0, len(self.mol_diffusion))]
+        self.molsize = [1.0 for k in range(0, len(self.mol_diffusion))] # default size = 10.0 (VDW radius in VMD)
+        #self.molsize = [self.kbt*10/(6.02214076*6*np.pi*eta*self.mol_diffusion[k]) for k in range(0, len(self.mol_diffusion))]
         self.molcolor = [0 for k in range(0, len(self.moltype))] # default color = 0 (blue) 
         return None
     
@@ -149,7 +150,7 @@ class h5toPDB:
                     resid_raw = resid_lookup.get(mol_t, "PSD")
                     resid = self.sanitize_name(resid_raw)
 
-                    lines.append(f"ATOM  {atom_str} {mol_t[:4]:<4} {resid[:3]} A{atom_str}{position}  0.00  0.00\n")
+                    lines.append(f"ATOM  {atom_str} {mol_t[:4]:<4} {resid[:3]} A{atom_str}   {position}  0.00  0.00\n")
                 lines.append("ENDMDL\n")
                 f.write("".join(lines))
             f.write("END")
@@ -176,7 +177,8 @@ class h5toPDB:
             overlap = np.zeros(len(self.moltype))
             for l in range(0, len(self.moltype)):
                 lines_tcl.append("mol representation VDW "+str(self.molsize[l]*6.6)+"\n")
-                safe_name = self.sanitize_name(self.moltype[l])
+                name = self.moltype[l]
+                safe_name = self.sanitize_name(name)[:4]  # take the first four letters of the molecule name and sanitize it
                 lines_tcl.append("mol selection name "+safe_name+"\n")
 
                 if resid_candidates != []:
